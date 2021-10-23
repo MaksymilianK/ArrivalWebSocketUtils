@@ -24,7 +24,7 @@ public class ArrivalWebsocketClient extends WebSocketClient {
     private final Map<Integer, List<Consumer<InboundMessage>>> listeners = new HashMap<>();
 
     public ArrivalWebsocketClient(WebSocketAddress address, Logger logger) {
-        super(URI.create(String.format("%s:%d", address.host(), address.port())));
+        super(URI.create(String.format("ws://%s:%d", address.host(), address.port())));
 
         this.logger = logger;
         this.gson = new GsonBuilder()
