@@ -11,6 +11,8 @@ repositories {
 
 dependencies {
     implementation "org.java-websocket:Java-WebSocket:1.5.2"
+    implementation 'com.google.code.gson:gson:2.8.8'
+    implementation 'org.slf4j:slf4j-api:1.7.32'
 
     testImplementation 'org.junit.jupiter:junit-jupiter-api:5.8.1'
     testImplementation 'org.assertj:assertj-core:3.21.0'
