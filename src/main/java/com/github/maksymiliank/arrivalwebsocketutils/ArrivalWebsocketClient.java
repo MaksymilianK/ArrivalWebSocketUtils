@@ -36,6 +36,10 @@ public class ArrivalWebsocketClient extends WebSocketClient {
         listeners.get(messageType).add(onMessage);
     }
 
+    public void send(OutboundMessage message) {
+        this.send(gson.toJson(message));
+    }
+
     @Override
     public void onOpen(ServerHandshake handshakeData) {
         logger.info("Opened WebSocket connection to the server");

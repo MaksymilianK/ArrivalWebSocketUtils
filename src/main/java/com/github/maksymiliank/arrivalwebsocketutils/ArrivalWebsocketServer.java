@@ -46,6 +46,15 @@ public class ArrivalWebsocketServer extends WebSocketServer {
         listeners.get(messageType).add(onMessage);
     }
 
+    public boolean send(int clientId, OutboundMessage message) {
+        if (!connectedClients.containsKey(clientId)) {
+            return false;
+        }
+
+        connectedClients.get(clientId).send(gson.toJson(message));
+        return true;
+    }
+
     @Override
     public ServerHandshakeBuilder onWebsocketHandshakeReceivedAsServer(WebSocket connection, Draft draft,
                                                                        ClientHandshake request) throws InvalidDataException {
