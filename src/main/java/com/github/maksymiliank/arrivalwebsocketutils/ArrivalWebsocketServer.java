@@ -11,7 +11,10 @@ import org.java_websocket.server.WebSocketServer;
 import org.slf4j.Logger;
 
 import java.net.InetSocketAddress;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.function.BiConsumer;
 
 public class ArrivalWebsocketServer extends WebSocketServer {
@@ -25,7 +28,7 @@ public class ArrivalWebsocketServer extends WebSocketServer {
     private final Map<Integer, WebSocket> connectedClients = new HashMap<>();
     private final Map<Integer, List<BiConsumer<Integer, InboundMessage>>> listeners = new HashMap<>();
 
-    public ArrivalWebsocketServer(Logger logger, int port, Map<InetSocketAddress, Integer> allowedClientAddresses) {
+    public ArrivalWebsocketServer(int port, Logger logger, Map<InetSocketAddress, Integer> allowedClientAddresses) {
         super(new InetSocketAddress("localhost", port));
 
         this.logger = logger;
@@ -44,18 +47,18 @@ public class ArrivalWebsocketServer extends WebSocketServer {
     }
 
     @Override
-    public ServerHandshakeBuilder onWebsocketHandshakeReceivedAsServer(WebSocket conn, Draft draft,
+    public ServerHandshakeBuilder onWebsocketHandshakeReceivedAsServer(WebSocket connection, Draft draft,
                                                                        ClientHandshake request) throws InvalidDataException {
-        ServerHandshakeBuilder builder = super.onWebsocketHandshakeReceivedAsServer(conn, draft, request);
+        ServerHandshakeBuilder builder = super.onWebsocketHandshakeReceivedAsServer(connection, draft, request);
 
-        if (!allowedClientAddresses.containsKey(conn.getRemoteSocketAddress())) {
+        if (!allowedClientAddresses.containsKey(connection.getRemoteSocketAddress())) {
             throw new InvalidDataException(
                     CODE_UNAUTHORIZED,
-                    String.format("Connection from the address '%s' is not allowed", conn.getRemoteSocketAddress())
+                    String.format("Connection from the address '%s' is not allowed", connection.getRemoteSocketAddress())
             );
         }
 
-        int clientId = allowedClientAddresses.get(conn.getRemoteSocketAddress());
+        int clientId = allowedClientAddresses.get(connection.getRemoteSocketAddress());
         if (connectedClients.containsKey(clientId)) {
             throw new InvalidDataException(
                     CODE_ALREADY_CONNECTED,
@@ -67,34 +70,34 @@ public class ArrivalWebsocketServer extends WebSocketServer {
     }
 
     @Override
-    public void onOpen(WebSocket conn, ClientHandshake handshake) {
-        int clientId = getClientId(conn);
-        connectedClients.put(clientId, conn);
+    public void onOpen(WebSocket connection, ClientHandshake handshake) {
+        int clientId = getClientId(connection);
+        connectedClients.put(clientId, connection);
         logger.info("Opened connection from client {}", clientId);
     }
 
     @Override
-    public void onClose(WebSocket conn, int code, String reason, boolean remote) {
-        int clientId = getClientId(conn);
+    public void onClose(WebSocket connection, int code, String reason, boolean remote) {
+        int clientId = getClientId(connection);
         connectedClients.remove(clientId);
-        logger.info("Closed connection from client {}", clientId);
+        logger.info("Connection from the client {} has been closed", clientId);
     }
 
     @Override
-    public void onMessage(WebSocket conn, String rawMessage) {
-        int clientId = getClientId(conn);
+    public void onMessage(WebSocket connection, String rawMessage) {
+        int clientId = getClientId(connection);
         var message = gson.fromJson(rawMessage, InboundMessage.class);
 
         if (listeners.containsKey(message.getType())) {
             listeners.get(message.getType()).forEach(c -> c.accept(clientId, message));
         } else {
-            logger.warn("There is no registered listener for message type {}", message.getType());
+            logger.warn("There is no registered listener for server message type {}", message.getType());
         }
     }
 
     @Override
-    public void onError(WebSocket conn, Exception ex) {
-        logger.error(ex.getMessage());
+    public void onError(WebSocket connection, Exception e) {
+        logger.error(e.getMessage());
     }
 
     @Override
@@ -102,7 +105,7 @@ public class ArrivalWebsocketServer extends WebSocketServer {
         logger.info("WebSocket server is running");
     }
 
-    private int getClientId(WebSocket conn) {
-        return allowedClientAddresses.get(conn.getRemoteSocketAddress());
+    private int getClientId(WebSocket connection) {
+        return allowedClientAddresses.get(connection.getRemoteSocketAddress());
     }
 }
