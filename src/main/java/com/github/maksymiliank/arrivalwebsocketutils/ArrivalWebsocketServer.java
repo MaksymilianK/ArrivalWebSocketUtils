@@ -28,11 +28,12 @@ public class ArrivalWebsocketServer extends WebSocketServer {
 
     private final Logger logger;
     private final Gson gson;
-    private final Map<InetSocketAddress, Integer> allowedClientAddresses = new HashMap<>();
+    private final Map<WebSocketAddress, Integer> allowedClientAddresses = new HashMap<>();
     private final Map<Integer, WebSocket> connectedClients = new HashMap<>();
+    private final Map<WebSocket, Integer> clientIds = new HashMap<>();
     private final Map<Integer, List<BiConsumer<Integer, InboundMessage>>> listeners = new HashMap<>();
 
-    public ArrivalWebsocketServer(int port, Logger logger, Map<InetSocketAddress, Integer> allowedClientAddresses) {
+    public ArrivalWebsocketServer(int port, Logger logger, Map<WebSocketAddress, Integer> allowedClientAddresses) {
         super(new InetSocketAddress("localhost", port));
 
         this.logger = logger;
@@ -75,14 +76,15 @@ public class ArrivalWebsocketServer extends WebSocketServer {
                                                                        ClientHandshake request) throws InvalidDataException {
         ServerHandshakeBuilder builder = super.onWebsocketHandshakeReceivedAsServer(connection, draft, request);
 
-        if (!allowedClientAddresses.containsKey(connection.getRemoteSocketAddress())) {
+        var wsAddress = getWsAddress(connection);
+        if (!allowedClientAddresses.containsKey(wsAddress)) {
             throw new InvalidDataException(
                     CODE_UNAUTHORIZED,
                     String.format("Connection from the address '%s' is not allowed", connection.getRemoteSocketAddress())
             );
         }
 
-        int clientId = allowedClientAddresses.get(connection.getRemoteSocketAddress());
+        int clientId = allowedClientAddresses.get(wsAddress);
 
         lock.readLock().lock();
         try {
@@ -100,11 +102,12 @@ public class ArrivalWebsocketServer extends WebSocketServer {
 
     @Override
     public void onOpen(WebSocket connection, ClientHandshake handshake) {
-        int clientId = getClientId(connection);
+        int clientId = allowedClientAddresses.get(getWsAddress(connection));
 
         lock.writeLock().lock();
         try {
             connectedClients.put(clientId, connection);
+            clientIds.put(connection, clientId);
         } finally {
             lock.writeLock().unlock();
         }
@@ -114,27 +117,24 @@ public class ArrivalWebsocketServer extends WebSocketServer {
 
     @Override
     public void onClose(WebSocket connection, int code, String reason, boolean remote) {
-        int clientId = getClientId(connection);
-
         lock.writeLock().lock();
         try {
-            connectedClients.remove(clientId);
+            connectedClients.remove(clientIds.get(connection));
         } finally {
             lock.writeLock().unlock();
         }
 
-        logger.info("Connection from the client {} has been closed", clientId);
+        logger.info("Connection from the client {} has been closed", clientIds.get(connection));
     }
 
     @Override
     public void onMessage(WebSocket connection, String rawMessage) {
-        int clientId = getClientId(connection);
         var message = gson.fromJson(rawMessage, InboundMessage.class);
 
         lock.readLock().lock();
         try {
             if (listeners.containsKey(message.getType())) {
-                listeners.get(message.getType()).forEach(c -> c.accept(clientId, message));
+                listeners.get(message.getType()).forEach(c -> c.accept(clientIds.get(connection), message));
             } else {
                 logger.warn("There is no registered listener for server message type {}", message.getType());
             }
@@ -153,7 +153,10 @@ public class ArrivalWebsocketServer extends WebSocketServer {
         logger.info("WebSocket server is running");
     }
 
-    private int getClientId(WebSocket connection) {
-        return allowedClientAddresses.get(connection.getRemoteSocketAddress());
+    private WebSocketAddress getWsAddress(WebSocket connection) {
+        return new WebSocketAddress(
+                connection.getRemoteSocketAddress().getHostName(),
+                connection.getRemoteSocketAddress().getPort()
+        );
     }
 }
