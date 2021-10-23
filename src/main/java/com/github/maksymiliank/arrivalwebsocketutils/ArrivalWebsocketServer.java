@@ -15,12 +15,16 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.BiConsumer;
 
 public class ArrivalWebsocketServer extends WebSocketServer {
 
     public static final int CODE_UNAUTHORIZED = 4000;
     public static final int CODE_ALREADY_CONNECTED = 4001;
+
+    private final ReadWriteLock lock = new ReentrantReadWriteLock();
 
     private final Logger logger;
     private final Gson gson;
@@ -39,19 +43,30 @@ public class ArrivalWebsocketServer extends WebSocketServer {
     }
 
     public void addListener(int messageType, BiConsumer<Integer, InboundMessage> onMessage) {
-        if (!listeners.containsKey(messageType)) {
-            listeners.put(messageType, new ArrayList<>());
-        }
+        lock.writeLock().lock();
+        try {
+            if (!listeners.containsKey(messageType)) {
+                listeners.put(messageType, new ArrayList<>());
+            }
 
-        listeners.get(messageType).add(onMessage);
+            listeners.get(messageType).add(onMessage);
+        } finally {
+            lock.writeLock().unlock();
+        }
     }
 
     public boolean send(int clientId, OutboundMessage message) {
-        if (!connectedClients.containsKey(clientId)) {
-            return false;
+        lock.readLock().lock();
+        try {
+            if (!connectedClients.containsKey(clientId)) {
+                return false;
+            }
+
+            connectedClients.get(clientId).send(gson.toJson(message));
+        } finally {
+            lock.readLock().unlock();
         }
 
-        connectedClients.get(clientId).send(gson.toJson(message));
         return true;
     }
 
@@ -68,27 +83,46 @@ public class ArrivalWebsocketServer extends WebSocketServer {
         }
 
         int clientId = allowedClientAddresses.get(connection.getRemoteSocketAddress());
-        if (connectedClients.containsKey(clientId)) {
-            throw new InvalidDataException(
-                    CODE_ALREADY_CONNECTED,
-                    String.format("The client %d is not allowed", clientId)
-            );
-        }
 
-        return builder;
+        lock.readLock().lock();
+        try {
+            if (connectedClients.containsKey(clientId)) {
+                throw new InvalidDataException(
+                        CODE_ALREADY_CONNECTED,
+                        String.format("The client %d is not allowed", clientId)
+                );
+            }
+            return builder;
+        } finally {
+            lock.readLock().unlock();
+        }
     }
 
     @Override
     public void onOpen(WebSocket connection, ClientHandshake handshake) {
         int clientId = getClientId(connection);
-        connectedClients.put(clientId, connection);
+
+        lock.writeLock().lock();
+        try {
+            connectedClients.put(clientId, connection);
+        } finally {
+            lock.writeLock().unlock();
+        }
+
         logger.info("Opened connection from client {}", clientId);
     }
 
     @Override
     public void onClose(WebSocket connection, int code, String reason, boolean remote) {
         int clientId = getClientId(connection);
-        connectedClients.remove(clientId);
+
+        lock.writeLock().lock();
+        try {
+            connectedClients.remove(clientId);
+        } finally {
+            lock.writeLock().unlock();
+        }
+
         logger.info("Connection from the client {} has been closed", clientId);
     }
 
@@ -97,10 +131,15 @@ public class ArrivalWebsocketServer extends WebSocketServer {
         int clientId = getClientId(connection);
         var message = gson.fromJson(rawMessage, InboundMessage.class);
 
-        if (listeners.containsKey(message.getType())) {
-            listeners.get(message.getType()).forEach(c -> c.accept(clientId, message));
-        } else {
-            logger.warn("There is no registered listener for server message type {}", message.getType());
+        lock.readLock().lock();
+        try {
+            if (listeners.containsKey(message.getType())) {
+                listeners.get(message.getType()).forEach(c -> c.accept(clientId, message));
+            } else {
+                logger.warn("There is no registered listener for server message type {}", message.getType());
+            }
+        } finally {
+            lock.readLock().unlock();
         }
     }
 

@@ -11,9 +11,13 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Consumer;
 
 public class ArrivalWebsocketClient extends WebSocketClient {
+
+    private final ReadWriteLock lock = new ReentrantReadWriteLock();
 
     private final Logger logger;
     private final Gson gson;
@@ -29,11 +33,16 @@ public class ArrivalWebsocketClient extends WebSocketClient {
     }
 
     public void addListener(int messageType, Consumer<InboundMessage> onMessage) {
-        if (!listeners.containsKey(messageType)) {
-            listeners.put(messageType, new ArrayList<>());
-        }
+        lock.writeLock().lock();
+        try {
+            if (!listeners.containsKey(messageType)) {
+                listeners.put(messageType, new ArrayList<>());
+            }
 
-        listeners.get(messageType).add(onMessage);
+            listeners.get(messageType).add(onMessage);
+        } finally {
+            lock.writeLock().unlock();
+        }
     }
 
     public void send(OutboundMessage message) {
@@ -49,10 +58,15 @@ public class ArrivalWebsocketClient extends WebSocketClient {
     public void onMessage(String rawMessage) {
         var message = gson.fromJson(rawMessage, InboundMessage.class);
 
-        if (listeners.containsKey(message.getType())) {
-            listeners.get(message.getType()).forEach(c -> c.accept(message));
-        } else {
-            logger.warn("There is no registered listener for client message type {}", message.getType());
+        lock.readLock().lock();
+        try {
+            if (listeners.containsKey(message.getType())) {
+                listeners.get(message.getType()).forEach(c -> c.accept(message));
+            } else {
+                logger.warn("There is no registered listener for client message type {}", message.getType());
+            }
+        } finally {
+            lock.readLock().unlock();
         }
     }
 
