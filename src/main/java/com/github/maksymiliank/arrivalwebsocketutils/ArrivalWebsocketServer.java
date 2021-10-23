@@ -120,6 +120,7 @@ public class ArrivalWebsocketServer extends WebSocketServer {
         lock.writeLock().lock();
         try {
             connectedClients.remove(clientIds.get(connection));
+            clientIds.remove(connection);
         } finally {
             lock.writeLock().unlock();
         }
