@@ -23,8 +23,8 @@ public class ArrivalWebsocketClient extends WebSocketClient {
     private final Gson gson;
     private final Map<Integer, List<Consumer<InboundMessage>>> listeners = new HashMap<>();
 
-    public ArrivalWebsocketClient(URI serverUri, Logger logger) {
-        super(serverUri);
+    public ArrivalWebsocketClient(WebSocketAddress address, Logger logger) {
+        super(URI.create(String.format("%s:%d", address.host(), address.port())));
 
         this.logger = logger;
         this.gson = new GsonBuilder()
