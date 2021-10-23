@@ -3,7 +3,7 @@ package com.github.maksymiliank.arrivalwebsocketutils;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
-public class InboundMessage {
+public final class InboundMessage {
 
     private final int type;
     private final JsonObject body;
