@@ -2,6 +2,7 @@ package com.github.maksymiliank.arrivalwebsocketutils;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonObject;
 import org.java_websocket.client.WebSocketClient;
 import org.java_websocket.handshake.ServerHandshake;
 import org.slf4j.Logger;
@@ -21,7 +22,7 @@ public class ArrivalWebsocketClient extends WebSocketClient {
 
     private final Logger logger;
     private final Gson gson;
-    private final Map<Integer, List<Consumer<InboundMessage>>> listeners = new HashMap<>();
+    private final Map<Integer, List<Consumer<JsonObject>>> listeners = new HashMap<>();
 
     public ArrivalWebsocketClient(WebSocketAddress address, Logger logger) {
         super(URI.create(String.format("ws://%s:%d", address.host(), address.port())));
@@ -32,7 +33,7 @@ public class ArrivalWebsocketClient extends WebSocketClient {
                 .create();
     }
 
-    public void addListener(int messageType, Consumer<InboundMessage> onMessage) {
+    public void addListener(int messageType, Consumer<JsonObject> onMessage) {
         lock.writeLock().lock();
         try {
             if (!listeners.containsKey(messageType)) {
@@ -61,7 +62,7 @@ public class ArrivalWebsocketClient extends WebSocketClient {
         lock.readLock().lock();
         try {
             if (listeners.containsKey(message.getType())) {
-                listeners.get(message.getType()).forEach(c -> c.accept(message));
+                listeners.get(message.getType()).forEach(c -> c.accept(message.getBody()));
             } else {
                 logger.warn("There is no registered listener for client message type {}", message.getType());
             }

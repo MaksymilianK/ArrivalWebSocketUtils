@@ -1,9 +1,8 @@
 package com.github.maksymiliank.arrivalwebsocketutils;
 
-import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
-public final class InboundMessage {
+final class InboundMessage {
 
     private final int type;
     private final JsonObject body;
@@ -17,7 +16,7 @@ public final class InboundMessage {
         return type;
     }
 
-    public JsonElement getBody() {
+    public JsonObject getBody() {
         return body;
     }
 }
