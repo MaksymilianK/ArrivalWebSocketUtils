@@ -2,6 +2,7 @@ package com.github.maksymiliank.arrivalwebsocketutils;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonObject;
 import org.java_websocket.WebSocket;
 import org.java_websocket.drafts.Draft;
 import org.java_websocket.exceptions.InvalidDataException;
@@ -31,7 +32,7 @@ public class ArrivalWebsocketServer extends WebSocketServer {
     private final Map<WebSocketAddress, Integer> allowedClientAddresses = new HashMap<>();
     private final Map<Integer, WebSocket> connectedClients = new HashMap<>();
     private final Map<WebSocket, Integer> clientIds = new HashMap<>();
-    private final Map<Integer, List<BiConsumer<Integer, InboundMessage>>> listeners = new HashMap<>();
+    private final Map<Integer, List<BiConsumer<Integer, JsonObject>>> listeners = new HashMap<>();
 
     public ArrivalWebsocketServer(int port, Logger logger, Map<WebSocketAddress, Integer> allowedClientAddresses) {
         super(new InetSocketAddress("localhost", port));
@@ -43,7 +44,7 @@ public class ArrivalWebsocketServer extends WebSocketServer {
         this.allowedClientAddresses.putAll(allowedClientAddresses);
     }
 
-    public void addListener(int messageType, BiConsumer<Integer, InboundMessage> onMessage) {
+    public void addListener(int messageType, BiConsumer<Integer, JsonObject> onMessage) {
         lock.writeLock().lock();
         try {
             if (!listeners.containsKey(messageType)) {
@@ -135,7 +136,7 @@ public class ArrivalWebsocketServer extends WebSocketServer {
         lock.readLock().lock();
         try {
             if (listeners.containsKey(message.getType())) {
-                listeners.get(message.getType()).forEach(c -> c.accept(clientIds.get(connection), message));
+                listeners.get(message.getType()).forEach(c -> c.accept(clientIds.get(connection), message.getBody()));
             } else {
                 logger.warn("There is no registered listener for server message type {}", message.getType());
             }
