@@ -1,4 +1,4 @@
-package com.github.maksymiliank.arrivalwebsocketutils;
+package com.github.maksymiliank.arrivalwebsocketutils.message;
 
 import com.google.gson.JsonDeserializationContext;
 import com.google.gson.JsonDeserializer;
@@ -7,10 +7,10 @@ import com.google.gson.JsonParseException;
 
 import java.lang.reflect.Type;
 
-class InboundMessageDeserializer implements JsonDeserializer<InboundMessage> {
+public class RawInboundMessageDeserializer implements JsonDeserializer<RawInboundMessage> {
 
     @Override
-    public InboundMessage deserialize(JsonElement json, Type typeOfT, JsonDeserializationContext context)
+    public RawInboundMessage deserialize(JsonElement json, Type typeOfT, JsonDeserializationContext context)
             throws JsonParseException {
         var body = json.getAsJsonObject();
 
@@ -27,6 +27,6 @@ class InboundMessageDeserializer implements JsonDeserializer<InboundMessage> {
         }
         body.remove("type");
 
-        return new InboundMessage(type, body);
+        return new RawInboundMessage(type, body);
     }
 }

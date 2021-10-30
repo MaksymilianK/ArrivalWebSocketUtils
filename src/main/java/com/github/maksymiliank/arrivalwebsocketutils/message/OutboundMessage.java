@@ -1,6 +1,6 @@
-package com.github.maksymiliank.arrivalwebsocketutils;
+package com.github.maksymiliank.arrivalwebsocketutils.message;
 
-public abstract class OutboundMessage {
+public abstract class OutboundMessage implements Message {
 
     private final int type;
 
@@ -8,6 +8,7 @@ public abstract class OutboundMessage {
         this.type = type;
     }
 
+    @Override
     public int getType() {
         return type;
     }

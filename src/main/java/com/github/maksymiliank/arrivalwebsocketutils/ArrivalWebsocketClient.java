@@ -1,5 +1,8 @@
 package com.github.maksymiliank.arrivalwebsocketutils;
 
+import com.github.maksymiliank.arrivalwebsocketutils.message.OutboundMessage;
+import com.github.maksymiliank.arrivalwebsocketutils.message.RawInboundMessage;
+import com.github.maksymiliank.arrivalwebsocketutils.message.RawInboundMessageDeserializer;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
@@ -29,7 +32,7 @@ public class ArrivalWebsocketClient extends WebSocketClient {
 
         this.logger = logger;
         this.gson = new GsonBuilder()
-                .registerTypeAdapter(Integer.class, new InboundMessageDeserializer())
+                .registerTypeAdapter(Integer.class, new RawInboundMessageDeserializer())
                 .create();
     }
 
@@ -57,7 +60,7 @@ public class ArrivalWebsocketClient extends WebSocketClient {
 
     @Override
     public void onMessage(String rawMessage) {
-        var message = gson.fromJson(rawMessage, InboundMessage.class);
+        var message = gson.fromJson(rawMessage, RawInboundMessage.class);
 
         lock.readLock().lock();
         try {
