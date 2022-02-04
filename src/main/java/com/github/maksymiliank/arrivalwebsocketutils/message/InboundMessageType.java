@@ -1,14 +1,15 @@
 package com.github.maksymiliank.arrivalwebsocketutils.message;
 
-public abstract class OutboundMessage implements Message {
+public enum InboundMessageType {
+
+    CLIENT_REGISTRATION (0);
 
     private final int type;
 
-    public OutboundMessage(int type) {
+    InboundMessageType(int type) {
         this.type = type;
     }
 
-    @Override
     public int getType() {
         return type;
     }

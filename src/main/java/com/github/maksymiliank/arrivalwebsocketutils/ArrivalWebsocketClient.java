@@ -1,43 +1,42 @@
 package com.github.maksymiliank.arrivalwebsocketutils;
 
-import com.github.maksymiliank.arrivalwebsocketutils.message.OutboundMessage;
-import com.github.maksymiliank.arrivalwebsocketutils.message.RawInboundMessage;
-import com.github.maksymiliank.arrivalwebsocketutils.message.RawInboundMessageDeserializer;
+import com.github.maksymiliank.arrivalwebsocketutils.message.Message;
+import com.github.maksymiliank.arrivalwebsocketutils.message.RawMessage;
 import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
 import org.java_websocket.client.WebSocketClient;
 import org.java_websocket.handshake.ServerHandshake;
 import org.slf4j.Logger;
 
 import java.net.URI;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.concurrent.*;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Consumer;
 
 public class ArrivalWebsocketClient extends WebSocketClient {
 
-    private final ReadWriteLock lock = new ReentrantReadWriteLock();
+    private static final String SERVER_ADDRESS = "ws://%s:%d/%s";
+    private static final int RESPONSE_WAITING_TIME = 5000;
+
+    private final ReadWriteLock listenersLock = new ReentrantReadWriteLock(true);
+    private final ReadWriteLock blockingLock = new ReentrantReadWriteLock(true);
 
     private final Logger logger;
     private final Gson gson;
     private final Map<Integer, List<Consumer<JsonObject>>> listeners = new HashMap<>();
+    private final Map<Integer, List<CompletableFuture<JsonObject>>> responseFutures = new HashMap<>();
 
-    public ArrivalWebsocketClient(WebSocketAddress address, Logger logger) {
-        super(URI.create(String.format("ws://%s:%d", address.host(), address.port())));
+    public ArrivalWebsocketClient(WebSocketAddress serverAddress, Logger logger, Gson gson) {
+        super(getServerURI(serverAddress));
 
         this.logger = logger;
-        this.gson = new GsonBuilder()
-                .registerTypeAdapter(Integer.class, new RawInboundMessageDeserializer())
-                .create();
+        this.gson = gson;
     }
 
     public void addListener(int messageType, Consumer<JsonObject> onMessage) {
-        lock.writeLock().lock();
+        listenersLock.writeLock().lock();
         try {
             if (!listeners.containsKey(messageType)) {
                 listeners.put(messageType, new ArrayList<>());
@@ -45,12 +44,36 @@ public class ArrivalWebsocketClient extends WebSocketClient {
 
             listeners.get(messageType).add(onMessage);
         } finally {
-            lock.writeLock().unlock();
+            listenersLock.writeLock().unlock();
         }
     }
 
-    public void send(OutboundMessage message) {
+    public void send(Message message) {
         this.send(gson.toJson(message));
+    }
+
+
+    public Optional<JsonObject> sendBlocking(Message message, int responseType) {
+        var future = new CompletableFuture<JsonObject>();
+
+        blockingLock.writeLock().lock();
+        try {
+            if (!responseFutures.containsKey(responseType)) {
+                responseFutures.put(responseType, new ArrayList<>());
+            }
+
+            responseFutures.get(responseType).add(future);
+        } finally {
+            blockingLock.writeLock().unlock();
+        }
+
+        this.send(message);
+
+        try {
+            return Optional.of(future.get(RESPONSE_WAITING_TIME, TimeUnit.MILLISECONDS));
+        } catch (InterruptedException | ExecutionException | TimeoutException e) {
+            return Optional.empty();
+        }
     }
 
     @Override
@@ -60,17 +83,32 @@ public class ArrivalWebsocketClient extends WebSocketClient {
 
     @Override
     public void onMessage(String rawMessage) {
-        var message = gson.fromJson(rawMessage, RawInboundMessage.class);
+        var message = gson.fromJson(rawMessage, RawMessage.class);
+        boolean consumed = false;
 
-        lock.readLock().lock();
+        listenersLock.readLock().lock();
         try {
-            if (listeners.containsKey(message.getType())) {
-                listeners.get(message.getType()).forEach(c -> c.accept(message.getBody()));
-            } else {
-                logger.warn("There is no registered listener for client message type {}", message.getType());
+            if (listeners.containsKey(message.type())) {
+                listeners.get(message.type()).forEach(c -> c.accept(message.body()));
+                consumed = true;
             }
         } finally {
-            lock.readLock().unlock();
+            listenersLock.readLock().unlock();
+        }
+
+        blockingLock.writeLock().lock();
+        try {
+            if (responseFutures.containsKey(message.type())) {
+                responseFutures.get(message.type()).forEach(f -> f.complete(message.body()));
+                responseFutures.remove(message.type());
+                consumed = true;
+            }
+        } finally {
+            blockingLock.writeLock().unlock();
+        }
+
+        if (!consumed) {
+            logger.warn("There is no registered listener for client message type {}", message.type());
         }
     }
 
@@ -82,5 +120,16 @@ public class ArrivalWebsocketClient extends WebSocketClient {
     @Override
     public void onError(Exception e) {
         logger.error(e.getMessage());
+    }
+
+    private static URI getServerURI(WebSocketAddress serverAddress) {
+        return URI.create(
+                String.format(
+                        SERVER_ADDRESS,
+                        serverAddress.host(),
+                        serverAddress.port(),
+                        serverAddress.path()
+                )
+        );
     }
 }

@@ -7,11 +7,10 @@ import com.google.gson.JsonParseException;
 
 import java.lang.reflect.Type;
 
-public class RawInboundMessageDeserializer implements JsonDeserializer<RawInboundMessage> {
+public class RawMessageDeserializer implements JsonDeserializer<RawMessage> {
 
     @Override
-    public RawInboundMessage deserialize(JsonElement json, Type typeOfT, JsonDeserializationContext context)
-            throws JsonParseException {
+    public RawMessage deserialize(JsonElement json, Type typeOfT, JsonDeserializationContext context) throws JsonParseException {
         var body = json.getAsJsonObject();
 
         var typeJson = body.get("type");
@@ -27,6 +26,6 @@ public class RawInboundMessageDeserializer implements JsonDeserializer<RawInboun
         }
         body.remove("type");
 
-        return new RawInboundMessage(type, body);
+        return new RawMessage(type, body);
     }
 }
